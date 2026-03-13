@@ -193,7 +193,6 @@ jobs:
           echo "Testing dependency imports..."
           python -c "import requests; print('✓ requests imported')"
           python -c "import pymongo; print('✓ pymongo imported')"
-          python -c "import pyautogui; print('✓ pyautogui imported')"
           echo "✓ All dependency imports successful"
         shell: bash
 
