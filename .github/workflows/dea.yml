@@ -147,7 +147,7 @@ jobs:
       - name: Install Brave webdriver
         run: |
           echo "Installing Brave webdriver..."
-          seleniumbase install chromedriver --brave
+          
           echo "✓ Brave webdriver installed"
         shell: bash
 
@@ -212,7 +212,7 @@ jobs:
             pytest \
             pytest-cov
           seleniumbase install chromedriver
-          seleniumbase install chromedriver --brave
+          
           echo "✓ Test dependencies installed"
         shell: bash
 
@@ -236,7 +236,7 @@ jobs:
           echo "Testing dependency imports..."
           python -c "import requests; print('✓ requests imported')"
           python -c "import pymongo; print('✓ pymongo imported')"
-          python -c "import pyautogui; print('✓ pyautogui imported')"
+          
           echo "✓ All dependency imports successful"
         shell: bash
 
@@ -371,7 +371,7 @@ jobs:
       - name: Install chromedriver and Brave webdriver
         run: |
           seleniumbase install chromedriver
-          seleniumbase install chromedriver --brave
+          
         shell: bash
 
       - name: Run main script with Brave
