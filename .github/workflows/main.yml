@@ -143,12 +143,6 @@ jobs:
           echo "✓ chromedriver installed"
         shell: bash
 
-      - name: Install Brave webdriver
-        run: |
-          echo "Installing Brave webdriver..."
-          seleniumbase install chromedriver --brave
-          echo "✓ Brave webdriver installed"
-        shell: bash
 
   test:
     name: Run Tests
