@@ -169,7 +169,7 @@ jobs:
             requests \
             pytest \
             pytest-cov
-          seleniumbase install chromedriver --brave
+          seleniumbase install chromedriver
           echo "✓ Test dependencies installed"
         shell: bash
 
@@ -307,7 +307,7 @@ jobs:
       - name: Install chromedriver and Brave webdriver
         run: |
           seleniumbase install chromedriver
-          seleniumbase install chromedriver --brave
+          seleniumbase install chromedriver
         shell: bash
 
       - name: Run main script with Brave
