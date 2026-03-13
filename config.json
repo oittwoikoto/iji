@@ -1,0 +1,8 @@
+{
+    "target_channel": "YnJ1dGFsbGVz",
+    "use_proxy": false,
+    "sleep_min": 450,
+    "sleep_max": 800,
+    "max_retries": 3,
+    "request_timeout": 10
+}
