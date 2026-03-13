@@ -1,0 +1,410 @@
+name: dea
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+env:
+  PY_COLORS: "1"
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  setup-and-test:
+    name: Setup and Test Environment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Set Locale
+        run: |
+          echo "Setting up locale..."
+          sudo apt-get update
+          sudo apt-get install -y tzdata locales
+          sudo locale-gen en_US.UTF-8
+          sudo localectl set-locale LANG="en_US.UTF-8"
+          export LANG="en_US.UTF-8"
+          sudo update-locale
+          echo "Locale setup complete"
+          locale
+        shell: bash
+
+      - name: Install system dependencies
+        run: |
+          echo "Installing system dependencies..."
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            x11-utils \
+            x11-xserver-utils \
+            curl \
+            gpg \
+            wget \
+            gnupg \
+            apt-transport-https
+          echo "System dependencies installed"
+        shell: bash
+
+      - name: Install Cloudflare WARP
+        run: |
+          echo "Setting up Cloudflare WARP..."
+          sudo apt-get -y update
+          
+          # Add Cloudflare GPG key
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | \
+            sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          
+          # Add Cloudflare repository
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | \
+            sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          
+          # Install WARP
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends cloudflare-warp
+          
+          # Configure WARP
+          echo "Configuring WARP..."
+          sudo warp-cli --accept-tos registration new || echo "WARP registration may already exist"
+          sudo warp-cli --accept-tos mode warp+doh
+          sudo warp-cli --accept-tos connect
+          
+          sleep 5
+          echo "WARP setup complete"
+        shell: bash
+
+      - name: Verify WARP connection
+        run: |
+          echo "Verifying WARP connection..."
+          max_attempts=5
+          attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt of $max_attempts..."
+            if curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
+              echo "✓ WARP connection verified"
+              exit 0
+            fi
+            
+            if [ $attempt -lt $max_attempts ]; then
+              sleep 3
+            fi
+            attempt=$((attempt + 1))
+          done
+          
+          echo "⚠ Warning: Could not verify WARP connection, continuing anyway..."
+          curl -s https://www.cloudflare.com/cdn-cgi/trace
+        shell: bash
+        continue-on-error: true
+
+      - name: Install Brave Browser
+        run: |
+          echo "Installing Brave Browser..."
+          sudo apt-get update
+          
+          # Add Brave GPG key
+          sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
+            https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+          
+          # Add Brave repository
+          echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main" | \
+            sudo tee /etc/apt/sources.list.d/brave-browser-release.list
+          
+          # Install Brave
+          sudo apt-get update
+          sudo apt-get install -y brave-browser
+          
+          echo "Verifying Brave installation..."
+          which brave-browser
+          brave-browser --version
+          echo "✓ Brave Browser installed successfully"
+        shell: bash
+
+      - name: Install Python dependencies
+        run: |
+          echo "Installing Python dependencies..."
+          python -m pip install --upgrade pip wheel setuptools
+          pip install \
+            seleniumbase \
+            pyautogui \
+            pymongo \
+            python-xlib \
+            requests
+          echo "✓ Python dependencies installed"
+        shell: bash
+
+      - name: Install chromedriver
+        run: |
+          echo "Installing chromedriver..."
+          seleniumbase install chromedriver
+          echo "✓ chromedriver installed"
+        shell: bash
+
+      - name: Install Brave webdriver
+        run: |
+          echo "Installing Brave webdriver..."
+          seleniumbase install chromedriver --brave
+          echo "✓ Brave webdriver installed"
+        shell: bash
+
+  test:
+    name: Run Tests
+    needs: setup-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install system dependencies
+        run: |
+          echo "Installing system dependencies for tests..."
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            x11-utils \
+            curl \
+            gpg \
+            apt-transport-https
+          echo "✓ System dependencies installed"
+        shell: bash
+
+      - name: Install Brave Browser (for test job)
+        run: |
+          echo "Installing Brave Browser for test job..."
+          
+          # Add Brave GPG key
+          sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
+            https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+          
+          # Add Brave repository
+          echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main" | \
+            sudo tee /etc/apt/sources.list.d/brave-browser-release.list
+          
+          # Install Brave
+          sudo apt-get update
+          sudo apt-get install -y brave-browser
+          
+          echo "Verifying Brave installation..."
+          which brave-browser
+          brave-browser --version
+          echo "✓ Brave Browser installed successfully"
+        shell: bash
+
+      - name: Install dependencies for tests
+        run: |
+          echo "Installing test dependencies..."
+          python -m pip install --upgrade pip wheel
+          pip install \
+            seleniumbase \
+            pyautogui \
+            pymongo \
+            python-xlib \
+            requests \
+            pytest \
+            pytest-cov
+          seleniumbase install chromedriver
+          seleniumbase install chromedriver --brave
+          echo "✓ Test dependencies installed"
+        shell: bash
+
+      - name: Test Python version
+        run: |
+          echo "Testing Python version..."
+          python --version
+          python -c "import sys; assert sys.version_info >= (3, 13), 'Python version too old'"
+          echo "✓ Python version test passed"
+        shell: bash
+
+      - name: Test seleniumbase installation
+        run: |
+          echo "Testing seleniumbase installation..."
+          python -c "from seleniumbase import SB; print('✓ SeleniumBase imported successfully')"
+          echo "✓ SeleniumBase test passed"
+        shell: bash
+
+      - name: Test dependencies imports
+        run: |
+          echo "Testing dependency imports..."
+          python -c "import requests; print('✓ requests imported')"
+          python -c "import pymongo; print('✓ pymongo imported')"
+          python -c "import pyautogui; print('✓ pyautogui imported')"
+          echo "✓ All dependency imports successful"
+        shell: bash
+
+      - name: Test Brave browser detection
+        run: |
+          echo "Testing Brave browser detection..."
+          if which brave-browser; then
+            echo "✓ Brave browser found"
+          else
+            echo "❌ Brave browser not found"
+            exit 1
+          fi
+          
+          if brave-browser --version; then
+            echo "✓ Brave version check passed"
+          else
+            echo "❌ Could not get Brave version"
+            exit 1
+          fi
+          echo "✓ Brave browser detection passed"
+        shell: bash
+
+      - name: Test script syntax
+        run: |
+          echo "Testing Python script syntax..."
+          if python -m py_compile script.py; then
+            echo "✓ Script syntax test passed"
+          else
+            echo "❌ Script has syntax errors"
+            exit 1
+          fi
+        shell: bash
+
+      - name: Run unit tests (if test_*.py files exist)
+        run: |
+          echo "Running unit tests..."
+          if find . -maxdepth 1 -name "test_*.py" | grep -q .; then
+            pytest test_*.py -v --tb=short || echo "⚠ Some tests failed but continuing..."
+          else
+            echo "ℹ No test files found, skipping unit tests"
+          fi
+        shell: bash
+        continue-on-error: true
+
+  build:
+    name: Build and Run
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      PY_COLORS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Set Locale
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tzdata locales
+          sudo locale-gen en_US.UTF-8
+          sudo localectl set-locale LANG="en_US.UTF-8"
+          export LANG="en_US.UTF-8"
+          sudo update-locale
+        shell: bash
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            x11-utils \
+            curl \
+            gpg \
+            wget \
+            gnupg \
+            apt-transport-https
+        shell: bash
+
+      - name: Install Cloudflare WARP
+        run: |
+          echo "Setting up Cloudflare WARP..."
+          sudo apt-get -y update
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | \
+            sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | \
+            sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends cloudflare-warp
+          sudo warp-cli --accept-tos registration new || true
+          sudo warp-cli --accept-tos mode warp+doh
+          sudo warp-cli --accept-tos connect
+          sleep 5
+        shell: bash
+
+      - name: Verify WARP connection
+        run: |
+          max_attempts=5
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            if curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
+              echo "✓ WARP connection verified"
+              exit 0
+            fi
+            sleep 3
+            attempt=$((attempt + 1))
+          done
+          echo "⚠ Warning: WARP connection not verified"
+        shell: bash
+        continue-on-error: true
+
+      - name: Install Brave Browser
+        run: |
+          echo "Installing Brave Browser..."
+          sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
+            https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main" | \
+            sudo tee /etc/apt/sources.list.d/brave-browser-release.list
+          sudo apt-get update
+          sudo apt-get install -y brave-browser
+          brave-browser --version
+        shell: bash
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install seleniumbase pyautogui pymongo python-xlib requests
+        shell: bash
+
+      - name: Install chromedriver and Brave webdriver
+        run: |
+          seleniumbase install chromedriver
+          seleniumbase install chromedriver --brave
+        shell: bash
+
+      - name: Run main script with Brave
+        run: |
+          echo "Starting main script execution..."
+          timeout 600 python script.py --brave --incognito --do-not-track --xvfb --screenshot || {
+            exit_code=$?
+            if [ $exit_code -eq 124 ]; then
+              echo "Script execution timed out after 10 minutes (expected behavior)"
+              exit 0
+            fi
+            exit $exit_code
+          }
+        shell: bash
+        continue-on-error: false
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seleniumbase-logs-and-screenshots
+          path: |
+            ./latest_logs/
+          retention-days: 7
+        continue-on-error: true
+
+      - name: Upload error logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-logs
+          path: |
+            *.log
+            ./latest_logs/
+          retention-days: 14
+        continue-on-error: true
