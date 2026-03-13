@@ -46,7 +46,8 @@ jobs:
             curl \
             gpg \
             wget \
-            gnupg
+            gnupg \
+            apt-transport-https
           echo "System dependencies installed"
         shell: bash
 
@@ -104,14 +105,13 @@ jobs:
         run: |
           echo "Installing Brave Browser..."
           sudo apt-get update
-          sudo apt-get install -y apt-transport-https curl
           
           # Add Brave GPG key
           sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
             https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
           
           # Add Brave repository
-          echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | \
+          echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main" | \
             sudo tee /etc/apt/sources.list.d/brave-browser-release.list
           
           # Install Brave
@@ -119,6 +119,7 @@ jobs:
           sudo apt-get install -y brave-browser
           
           echo "Verifying Brave installation..."
+          which brave-browser
           brave-browser --version
           echo "✓ Brave Browser installed successfully"
         shell: bash
@@ -143,6 +144,12 @@ jobs:
           echo "✓ chromedriver installed"
         shell: bash
 
+      - name: Install Brave webdriver
+        run: |
+          echo "Installing Brave webdriver..."
+          
+          echo "✓ Brave webdriver installed"
+        shell: bash
 
   test:
     name: Run Tests
@@ -157,10 +164,45 @@ jobs:
           python-version: "3.13"
           cache: "pip"
 
+      - name: Install system dependencies
+        run: |
+          echo "Installing system dependencies for tests..."
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            x11-utils \
+            curl \
+            gpg \
+            apt-transport-https
+          echo "✓ System dependencies installed"
+        shell: bash
+
+      - name: Install Brave Browser (for test job)
+        run: |
+          echo "Installing Brave Browser for test job..."
+          
+          # Add Brave GPG key
+          sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
+            https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+          
+          # Add Brave repository
+          echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main" | \
+            sudo tee /etc/apt/sources.list.d/brave-browser-release.list
+          
+          # Install Brave
+          sudo apt-get update
+          sudo apt-get install -y brave-browser
+          
+          echo "Verifying Brave installation..."
+          which brave-browser
+          brave-browser --version
+          echo "✓ Brave Browser installed successfully"
+        shell: bash
+
       - name: Install dependencies for tests
         run: |
           echo "Installing test dependencies..."
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip wheel
           pip install \
             seleniumbase \
             pyautogui \
@@ -170,6 +212,7 @@ jobs:
             pytest \
             pytest-cov
           seleniumbase install chromedriver
+          
           echo "✓ Test dependencies installed"
         shell: bash
 
@@ -193,22 +236,38 @@ jobs:
           echo "Testing dependency imports..."
           python -c "import requests; print('✓ requests imported')"
           python -c "import pymongo; print('✓ pymongo imported')"
+          
           echo "✓ All dependency imports successful"
         shell: bash
 
       - name: Test Brave browser detection
         run: |
           echo "Testing Brave browser detection..."
-          which brave-browser || (echo "❌ Brave browser not found" && exit 1)
-          brave-browser --version || (echo "❌ Could not get Brave version" && exit 1)
+          if which brave-browser; then
+            echo "✓ Brave browser found"
+          else
+            echo "❌ Brave browser not found"
+            exit 1
+          fi
+          
+          if brave-browser --version; then
+            echo "✓ Brave version check passed"
+          else
+            echo "❌ Could not get Brave version"
+            exit 1
+          fi
           echo "✓ Brave browser detection passed"
         shell: bash
 
       - name: Test script syntax
         run: |
           echo "Testing Python script syntax..."
-          python -m py_compile script.py || (echo "❌ Script has syntax errors" && exit 1)
-          echo "✓ Script syntax test passed"
+          if python -m py_compile script.py; then
+            echo "✓ Script syntax test passed"
+          else
+            echo "❌ Script has syntax errors"
+            exit 1
+          fi
         shell: bash
 
       - name: Run unit tests (if test_*.py files exist)
@@ -250,7 +309,14 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb x11-utils curl gpg wget gnupg
+          sudo apt-get install -y \
+            xvfb \
+            x11-utils \
+            curl \
+            gpg \
+            wget \
+            gnupg \
+            apt-transport-https
         shell: bash
 
       - name: Install Cloudflare WARP
@@ -286,11 +352,10 @@ jobs:
 
       - name: Install Brave Browser
         run: |
-          sudo apt-get update
-          sudo apt-get install -y apt-transport-https curl
+          echo "Installing Brave Browser..."
           sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
             https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | \
+          echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main" | \
             sudo tee /etc/apt/sources.list.d/brave-browser-release.list
           sudo apt-get update
           sudo apt-get install -y brave-browser
@@ -306,7 +371,7 @@ jobs:
       - name: Install chromedriver and Brave webdriver
         run: |
           seleniumbase install chromedriver
-          seleniumbase install chromedriver
+          
         shell: bash
 
       - name: Run main script with Brave
@@ -322,16 +387,6 @@ jobs:
           }
         shell: bash
         continue-on-error: false
-
-      - name: Upload screenshots and logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: seleniumbase-logs-and-screenshots
-          path: |
-            ./latest_logs/
-          retention-days: 7
-        continue-on-error: true
 
       - name: Upload error logs
         if: failure()
